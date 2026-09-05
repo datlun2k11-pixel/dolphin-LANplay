@@ -42,6 +42,9 @@
 
 #ifdef OpenEmu
 #include "DolphinGameCore.h"
+#ifndef GET_CURRENT_OR_RETURN
+#define GET_CURRENT_OR_RETURN(val) DolphinGameCore *current = _current; if (!current) return val;
+#endif
 #endif
 
 #if defined(__APPLE__)
