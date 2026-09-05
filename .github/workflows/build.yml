@@ -32,6 +32,7 @@ jobs:
           #import <Foundation/Foundation.h>
           #import <AppKit/AppKit.h>
           #import <OpenGL/gl3.h>
+          #import <OpenEmuBase/OEAudioBuffer.h>
           typedef struct OEIntSize { int width; int height; } OEIntSize;
           static inline OEIntSize OEIntSizeMake(int w, int h) { OEIntSize s={w,h}; return s; }
           typedef NS_ENUM(NSInteger, OEGameCoreRendering) { OEGameCoreRenderingOpenGL3Video = 0 };
@@ -39,11 +40,6 @@ jobs:
           - (void)willRenderFrameOnAlternateThread;
           - (id)presentationFramebuffer;
           - (void)suspendFPSLimiting;
-          @end
-          @protocol OEAudioBuffer <NSObject>
-          @optional
-          - (NSUInteger)read:(void *)buffer maxLength:(NSUInteger)len;
-          - (NSUInteger)write:(const void *)buffer maxLength:(NSUInteger)len;
           @end
           @class OERingBuffer;
           #define OE_EXPORTED_CLASS
@@ -94,6 +90,42 @@ jobs:
           cat > OpenEmuSystem.framework/Headers/OpenEmuSystem.h <<'EOF'
           #import <Foundation/Foundation.h>
           EOF
+          # Mock OEGCSystemResponderClient.h at SRCROOT (needed by DolphinGameCore.h / DolHost.h)
+          cat > OEGCSystemResponderClient.h <<'EOF'
+          #import <Foundation/Foundation.h>
+          @protocol OESystemResponderClient;
+          typedef enum _OEGCButton
+          {
+              OEGCButtonUp,
+              OEGCButtonDown,
+              OEGCButtonLeft,
+              OEGCButtonRight,
+              OEGCAnalogUp,
+              OEGCAnalogDown,
+              OEGCAnalogLeft,
+              OEGCAnalogRight,
+              OEGCAnalogCUp,
+              OEGCAnalogCDown,
+              OEGCAnalogCLeft,
+              OEGCAnalogCRight,
+              OEGCButtonA,
+              OEGCButtonB,
+              OEGCButtonX,
+              OEGCButtonY,
+              OEGCButtonL,
+              OEGCButtonR,
+              OEGCButtonZ,
+              OEGCButtonStart,
+              OEGCButtonCount
+          } OEGCButton;
+          @protocol OEGCSystemResponderClient <OESystemResponderClient, NSObject>
+          - (oneway void)didMoveGCJoystickDirection:(OEGCButton)button withValue:(CGFloat)value forPlayer:(NSUInteger)player;
+          - (oneway void)didPushGCButton:(OEGCButton)button forPlayer:(NSUInteger)player;
+          - (oneway void)didReleaseGCButton:(OEGCButton)button forPlayer:(NSUInteger)player;
+          @end
+          EOF
+          # Also ensure header search finds it when including "OEGCSystemResponderClient.h" via SRCROOT
+          ls -l OEGCSystemResponderClient.h
           # Create dummy binaries so linker is happy
           echo "int _oe_dummy=0;" | clang -c -x c -o /tmp/oe_dummy.o -
           libtool -static -o OpenEmuBase.framework/OpenEmuBase /tmp/oe_dummy.o
