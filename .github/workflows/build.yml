@@ -112,8 +112,6 @@ jobs:
             -configuration Release \
             SYMROOT="$PWD/build" \
             OBJROOT="$PWD/build/obj" \
-            FRAMEWORK_SEARCH_PATHS="$PWD $PWD/build/Release /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.10.sdk/System/Library/Frameworks" \
-            HEADER_SEARCH_PATHS="$PWD" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
