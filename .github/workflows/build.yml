@@ -23,6 +23,85 @@ jobs:
           sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           xcodebuild -version
 
+      - name: Create mock OpenEmu frameworks (CI only)
+        run: |
+          echo "Creating mock OpenEmuBase.framework and OpenEmuSystem.framework"
+          mkdir -p OpenEmuBase.framework/Headers
+          mkdir -p OpenEmuSystem.framework/Headers
+          cat > OpenEmuBase.framework/Headers/OEGameCore.h <<'EOF'
+          #import <Foundation/Foundation.h>
+          #import <AppKit/AppKit.h>
+          #import <OpenGL/gl3.h>
+          typedef struct OEIntSize { int width; int height; } OEIntSize;
+          static inline OEIntSize OEIntSizeMake(int w, int h) { OEIntSize s={w,h}; return s; }
+          typedef NS_ENUM(NSInteger, OEGameCoreRendering) { OEGameCoreRenderingOpenGL3Video = 0 };
+          @protocol OEGameCoreRenderingDelegate <NSObject>
+          - (void)willRenderFrameOnAlternateThread;
+          - (id)presentationFramebuffer;
+          - (void)suspendFPSLimiting;
+          @end
+          @protocol OEAudioBuffer <NSObject>
+          @optional
+          - (NSUInteger)read:(void *)buffer maxLength:(NSUInteger)len;
+          - (NSUInteger)write:(const void *)buffer maxLength:(NSUInteger)len;
+          @end
+          @class OERingBuffer;
+          #define OE_EXPORTED_CLASS
+          #define OE_SAMPLERATE 48000
+          #define OE_SIZESOUNDBUFFER 4096
+          @interface OEGameCore : NSObject <OEAudioBuffer>
+          @property (nonatomic, weak) id<OEGameCoreRenderingDelegate> renderDelegate;
+          - (instancetype)init;
+          - (BOOL)loadFileAtPath:(NSString *)path;
+          - (void)startEmulation;
+          - (void)stopEmulation;
+          - (void)resetEmulation;
+          - (void)executeFrame;
+          - (void)setPauseEmulation:(BOOL)flag;
+          - (BOOL)isEmulationPaused;
+          - (NSString *)supportDirectoryPath;
+          - (NSString *)systemIdentifier;
+          - (OEGameCoreRendering)gameCoreRendering;
+          - (BOOL)hasAlternateRenderingThread;
+          - (BOOL)needsDoubleBufferedFBO;
+          - (const void *)videoBuffer;
+          - (NSTimeInterval)frameInterval;
+          - (OEIntSize)bufferSize;
+          - (OEIntSize)aspectSize;
+          - (GLenum)pixelFormat;
+          - (GLenum)pixelType;
+          - (GLenum)internalPixelFormat;
+          - (NSUInteger)channelCount;
+          - (double)audioSampleRate;
+          - (id<OEAudioBuffer>)audioBufferAtIndex:(NSUInteger)index;
+          @end
+          EOF
+          cat > OpenEmuBase.framework/Headers/OETimingUtils.h <<'EOF'
+          #import <Foundation/Foundation.h>
+          EOF
+          cat > OpenEmuBase.framework/Headers/OEAudioBuffer.h <<'EOF'
+          #import <Foundation/Foundation.h>
+          @protocol OEAudioBuffer
+          @optional
+          - (NSUInteger)read:(void *)buffer maxLength:(NSUInteger)len;
+          @end
+          EOF
+          cat > OpenEmuBase.framework/Headers/OERingBuffer.h <<'EOF'
+          #import <Foundation/Foundation.h>
+          @interface OERingBuffer : NSObject
+          @end
+          EOF
+          cat > OpenEmuSystem.framework/Headers/OpenEmuSystem.h <<'EOF'
+          #import <Foundation/Foundation.h>
+          EOF
+          # Create dummy binaries so linker is happy
+          echo "int _oe_dummy=0;" | clang -c -x c -o /tmp/oe_dummy.o -
+          libtool -static -o OpenEmuBase.framework/OpenEmuBase /tmp/oe_dummy.o
+          libtool -static -o OpenEmuSystem.framework/OpenEmuSystem /tmp/oe_dummy.o
+          # Check
+          ls -R OpenEmuBase.framework
+          ls -R OpenEmuSystem.framework
+
       - name: Build Dolphin core (Release)
         run: |
           set -o pipefail
