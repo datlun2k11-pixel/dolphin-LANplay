@@ -163,6 +163,8 @@ DolHost::DolHost()
 {
 }
 
+DolHost::~DolHost() = default;
+
 void DolHost::Init(std::string supportDirectoryPath, std::string cpath)
 {
     // Set the game file for the DolHost

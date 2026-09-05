@@ -109,6 +109,7 @@ public:
     
     static DolHost* m_instance;
     DolHost();
+    ~DolHost();
 
     void GetGameInfo();
     std::string GetDirOfCountry(DiscIO::Country country);
