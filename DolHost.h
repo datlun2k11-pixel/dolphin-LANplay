@@ -38,6 +38,15 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "DiscIO/Enums.h"
 
+namespace NetPlay
+{
+class NetPlayClient;
+class NetPlayServer;
+class NetPlayUI;
+struct NetTraversalConfig;
+}
+class DolNetPlayUI;
+
 class DolHost {
 public:
     static DolHost* GetInstance();
@@ -77,7 +86,9 @@ public:
     bool CoreRunning();
 
     WindowSystemInfo GetWSI();
-    
+    std::string GetGamePath() const { return _gamePath; }
+    bool IsNetPlayHosting() const { return m_netplay_server != nullptr; }
+
     void SetCheat(std::string code, std::string value, bool enabled);
     //Vector of all Codes
     std::vector<Gecko::GeckoCode> gcodes;
@@ -85,6 +96,14 @@ public:
     //Individual codes
     Gecko::GeckoCode gcode;
     ActionReplay::ARCode arcode;
+
+    // LAN NetPlay (direct IP, no traversal)
+    bool HostNetPlayLAN(const std::string& player_name, uint16_t port);
+    bool JoinNetPlayLAN(const std::string& address, uint16_t port,
+                        const std::string& player_name);
+    void StopNetPlay();
+    bool IsNetPlayRunning() const;
+    void SetNetPlayUI(void* ui) {}
     
     private:
     
@@ -115,6 +134,9 @@ public:
 
     void SetUpPlayerInputs();
     ciface::Core::Device::Input* m_playerInputs[4][OEWiiButtonCount];
-    
-    
+
+    // NetPlay LAN state
+    std::unique_ptr<NetPlay::NetPlayClient> m_netplay_client;
+    std::unique_ptr<NetPlay::NetPlayServer> m_netplay_server;
+    std::unique_ptr<DolNetPlayUI> m_netplay_ui;
 };

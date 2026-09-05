@@ -407,4 +407,25 @@ extern std::unique_ptr<SoundStream> g_sound_stream;
 {
     dol_host->SetCheat([code UTF8String], [type UTF8String], enabled);
 }
+
+#pragma mark - LAN NetPlay
+- (BOOL)hostNetPlayLANOnPort:(int)port playerName:(NSString *)name
+{
+    std::string n = name ? [name UTF8String] : "Player1";
+    return dol_host->HostNetPlayLAN(n, (uint16_t)port) ? YES : NO;
+}
+- (BOOL)joinNetPlayLANAtAddress:(NSString *)address port:(int)port playerName:(NSString *)name
+{
+    std::string addr = address ? [address UTF8String] : "127.0.0.1";
+    std::string n = name ? [name UTF8String] : "Player2";
+    return dol_host->JoinNetPlayLAN(addr, (uint16_t)port, n) ? YES : NO;
+}
+- (void)stopNetPlay
+{
+    dol_host->StopNetPlay();
+}
+- (BOOL)isNetPlayRunning
+{
+    return dol_host->IsNetPlayRunning() ? YES : NO;
+}
 @end

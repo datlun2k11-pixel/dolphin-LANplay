@@ -40,6 +40,12 @@ OE_EXPORTED_CLASS
 - (const char *) getBundlePath;
 - (void) SetScreenSize:(int)width :(int)height;
 
+// LAN NetPlay (direct IP)
+- (BOOL)hostNetPlayLANOnPort:(int)port playerName:(NSString *)name;
+- (BOOL)joinNetPlayLANAtAddress:(NSString *)address port:(int)port playerName:(NSString *)name;
+- (void)stopNetPlay;
+- (BOOL)isNetPlayRunning;
+
 @end
 
 extern DolphinGameCore *_current;

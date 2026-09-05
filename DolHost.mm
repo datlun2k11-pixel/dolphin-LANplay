@@ -82,6 +82,67 @@
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 
+#include "Core/NetPlayClient.h"
+#include "Core/NetPlayServer.h"
+#include "Core/NetPlayProto.h"
+#include "Core/Boot/Boot.h"
+#include "Core/SyncIdentifier.h"
+
+// Minimal LAN NetPlay UI for OpenEmu (headless, direct IP)
+class DolNetPlayUI : public NetPlay::NetPlayUI
+{
+public:
+  explicit DolNetPlayUI(DolHost* host) : m_host(host) {}
+  void BootGame(const std::string& filename,
+                std::unique_ptr<BootSessionData> boot_session_data) override
+  {
+    // For LAN, host triggers StartGame; if not running, boot the local file
+    // BootSessionData contains sync identifier – we ignore and boot _gamePath if filename empty
+    std::string path = filename.empty() ? m_host->GetGamePath() : filename;
+    if (!path.empty())
+    {
+      BootParameters params = BootParameters::GenerateFromFile(path, std::move(boot_session_data));
+      if (!BootManager::BootCore(std::move(params), m_host->GetWSI()))
+        NSLog(@"[NetPlay LAN] BootGame failed: %s", path.c_str());
+    }
+  }
+  void StopGame() override { Core::Stop(); }
+  bool IsHosting() const override { return m_host->IsNetPlayHosting(); }
+  void Update() override {}
+  void AppendChat(const std::string& msg) override { NSLog(@"[NetPlay Chat] %s", msg.c_str()); }
+  void OnMsgChangeGame(const SyncIdentifier&, const std::string&) override {}
+  void OnMsgChangeGBARom(int, const NetPlay::GBAConfig&) override {}
+  void OnMsgStartGame() override { NSLog(@"[NetPlay LAN] OnMsgStartGame"); }
+  void OnMsgStopGame() override { NSLog(@"[NetPlay LAN] OnMsgStopGame"); }
+  void OnMsgPowerButton() override { Core::SetState(Core::State::Paused); }
+  void OnPlayerConnect(const std::string& p) override { NSLog(@"[NetPlay] Player connect: %s", p.c_str()); }
+  void OnPlayerDisconnect(const std::string& p) override { NSLog(@"[NetPlay] Player disconnect: %s", p.c_str()); }
+  void OnPadBufferChanged(u32) override {}
+  void OnHostInputAuthorityChanged(bool) override {}
+  void OnDesync(u32 frame, const std::string& player) override { NSLog(@"[NetPlay] Desync frame %u player %s", frame, player.c_str()); }
+  void OnConnectionLost() override { NSLog(@"[NetPlay] Connection lost"); }
+  void OnConnectionError(const std::string& msg) override { NSLog(@"[NetPlay] Connection error: %s", msg.c_str()); }
+  void OnTraversalError(TraversalClient::FailureReason) override {}
+  void OnTraversalStateChanged(TraversalClient::State) override {}
+  void OnGameStartAborted() override { NSLog(@"[NetPlay] Game start aborted"); }
+  void OnGolferChanged(bool, const std::string&) override {}
+  bool IsRecording() override { return false; }
+  std::shared_ptr<const UICommon::GameFile> FindGameFile(const SyncIdentifier&, SyncIdentifierComparison* cmp) override { if(cmp) *cmp = SyncIdentifierComparison::SameGame; return nullptr; }
+  std::string FindGBARomPath(const std::array<u8,20>&, std::string_view, int) override { return ""; }
+  void ShowMD5Dialog(const std::string&) override {}
+  void SetMD5Progress(int, int) override {}
+  void SetMD5Result(int, const std::string&) override {}
+  void AbortMD5() override {}
+  void OnIndexAdded(bool, std::string) override {}
+  void OnIndexRefreshFailed(std::string) override {}
+  void ShowChunkedProgressDialog(const std::string&, u64, const std::vector<int>&) override {}
+  void HideChunkedProgressDialog() override {}
+  void SetChunkedProgress(int, u64) override {}
+  void SetHostWiiSyncData(std::vector<u64>, std::string) override {}
+private:
+  DolHost* m_host;
+};
+
 DolHost* DolHost::m_instance = nullptr;
 static Common::Event updateMainFrameEvent;
 static Common::Flag s_running{true};
@@ -602,6 +663,62 @@ std::string DolHost::GetDirOfCountry(DiscIO::Country country)
 WindowSystemInfo DolHost::GetWSI()
 {
     return wsi;
+}
+
+#pragma mark - LAN NetPlay
+
+bool DolHost::HostNetPlayLAN(const std::string& player_name, uint16_t port)
+{
+    if (m_netplay_server || m_netplay_client)
+        return false;
+    m_netplay_ui = std::make_unique<DolNetPlayUI>(this);
+    NetPlay::NetTraversalConfig trav{false, "", 0};
+    try {
+        m_netplay_server = std::make_unique<NetPlay::NetPlayServer>(port, false, m_netplay_ui.get(), trav);
+        m_netplay_server->SetPadMapping({1, 2, 3, 4});
+        m_netplay_server->SetWiimoteMapping({1, 2, 3, 4});
+        NSLog(@"[NetPlay LAN] Hosting on port %u as %s", port, player_name.c_str());
+        // Also connect as client to own server for unified path (loopback)
+        // Create local client that connects to 127.0.0.1
+        m_netplay_client = std::make_unique<NetPlay::NetPlayClient>("127.0.0.1", port, m_netplay_ui.get(), player_name, trav);
+        NetPlay::NetPlay_Enable(m_netplay_client.get());
+        return m_netplay_server->is_connected;
+    } catch (...) {
+        m_netplay_server.reset();
+        m_netplay_client.reset();
+        return false;
+    }
+}
+
+bool DolHost::JoinNetPlayLAN(const std::string& address, uint16_t port, const std::string& player_name)
+{
+    if (m_netplay_server || m_netplay_client)
+        return false;
+    m_netplay_ui = std::make_unique<DolNetPlayUI>(this);
+    NetPlay::NetTraversalConfig trav{false, "", 0};
+    try {
+        m_netplay_client = std::make_unique<NetPlay::NetPlayClient>(address, port, m_netplay_ui.get(), player_name, trav);
+        NetPlay::NetPlay_Enable(m_netplay_client.get());
+        NSLog(@"[NetPlay LAN] Joining %s:%u as %s", address.c_str(), port, player_name.c_str());
+        return true;
+    } catch (...) {
+        m_netplay_client.reset();
+        return false;
+    }
+}
+
+void DolHost::StopNetPlay()
+{
+    NetPlay::NetPlay_Disable();
+    if (m_netplay_client) { m_netplay_client->Stop(); m_netplay_client.reset(); }
+    if (m_netplay_server) { m_netplay_server.reset(); }
+    m_netplay_ui.reset();
+    NSLog(@"[NetPlay LAN] Stopped");
+}
+
+bool DolHost::IsNetPlayRunning() const
+{
+    return NetPlay::IsNetPlayRunning();
 }
 
 # pragma mark - Dolphin Host callbacks
