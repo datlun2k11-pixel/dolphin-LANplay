@@ -25,28 +25,40 @@ jobs:
 
       - name: Build Dolphin core (Release)
         run: |
+          set -o pipefail
+          # Show where Xcode will put products
+          xcodebuild -project Dolphin.xcodeproj -target Dolphin -configuration Release -showBuildSettings | grep -E "BUILT_PRODUCTS_DIR|SYMROOT|OBJROOT|TARGET_BUILD_DIR" || true
           xcodebuild -project Dolphin.xcodeproj \
             -target Dolphin \
             -configuration Release \
-            -derivedDataPath build \
+            SYMROOT="$PWD/build" \
+            OBJROOT="$PWD/build/obj" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
-            | xcpretty || cat build/Logs/**/*.log
+            CODE_SIGNING_REQUIRED=NO \
+            2>&1 | tee build.log
 
       - name: Package .zip
         run: |
-          PLUGIN="build/Build/Products/Release/Dolphin.oecoreplugin"
-          WII="build/Build/Products/Release/Wii.oesystemplugin"
-          # fallback if SYMROOT differs
-          if [ ! -d "$PLUGIN" ]; then
-            PLUGIN=$(find build -name "Dolphin.oecoreplugin" -type d | head -n1)
+          set -x
+          echo "=== pwd & ls ==="
+          pwd; ls -la
+          echo "=== find plugins ==="
+          find . -name "Dolphin.oecoreplugin" -type d 2>/dev/null | head -n 20
+          find "$HOME/Library/Developer/Xcode/DerivedData" -name "Dolphin.oecoreplugin" -type d 2>/dev/null | head -n 20 || true
+          find build -name "Dolphin.oecoreplugin" -type d 2>/dev/null | head -n 20 || true
+          PLUGIN=$(find . -name "Dolphin.oecoreplugin" -type d 2>/dev/null | head -n1)
+          WII=$(find . -name "Wii.oesystemplugin" -type d 2>/dev/null | head -n1)
+          # also check DerivedData
+          if [ -z "$PLUGIN" ]; then
+            PLUGIN=$(find "$HOME/Library/Developer/Xcode/DerivedData" -name "Dolphin.oecoreplugin" -type d 2>/dev/null | head -n1)
           fi
-          if [ ! -d "$WII" ]; then
-            WII=$(find build -name "Wii.oesystemplugin" -type d | head -n1)
+          if [ -z "$WII" ]; then
+            WII=$(find "$HOME/Library/Developer/Xcode/DerivedData" -name "Wii.oesystemplugin" -type d 2>/dev/null | head -n1)
           fi
           echo "Plugin: $PLUGIN"
           echo "Wii: $WII"
-          ls -R build/Build/Products/Release || true
+          ls -R build 2>/dev/null | head -n 100 || true
           mkdir -p dist
           if [ -d "$PLUGIN" ]; then
             ditto -c -k --sequesterRsrc --keepParent "$PLUGIN" "dist/Dolphin-LANplay.oecoreplugin.zip"
